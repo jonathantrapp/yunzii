@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AL80 Screen</title>
+<style>
+  :root {
+    --bg: #0d0f16; --card: #171a26; --line: #2a2f42; --fg: #e9ecf4; --dim: #8f97b0;
+    --accent: #50c8ff; --ok: #5adc78; --warn: #ffb43c; --bad: #ff505a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.45 system-ui, "Segoe UI", sans-serif; }
+  main > * { min-width: 0; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px;
+         display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 0 0 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .left { position: sticky; top: 16px; }
+  .screen { background: #000; border-radius: 12px; padding: 14px; display: flex; justify-content: center; }
+  .screen img { width: 192px; height: 320px; image-rendering: pixelated; display: block; }
+  .status { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); flex: none; }
+  .dot.on { background: var(--ok); } .dot.dry { background: var(--warn); }
+  .small { color: var(--dim); font-size: 13px; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 10px 0 0; font-size: 13px; }
+  dt { color: var(--dim); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .modes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  button, .file { font: inherit; color: var(--fg); background: #20253a; border: 1px solid var(--line);
+           border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button:hover, .file:hover { border-color: var(--accent); }
+  button.sel { background: var(--accent); color: #04121c; border-color: var(--accent); font-weight: 600; }
+  button.danger:hover { border-color: var(--bad); }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 12px; }
+  label { display: inline-flex; align-items: center; gap: 6px; }
+  input[type=text], input[type=number], select { max-width: 230px; font: inherit; color: var(--fg); background: #0f1220;
+           border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  input[type=number] { width: 84px; } input[type=text] { width: 130px; }
+  input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  input[type=file] { display: none; }
+  #msg { min-height: 20px; color: var(--warn); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="left">
+    <div class="card">
+      <h1>AL80 Screen</h1>
+      <div class="small">96 × 160, shown at 2×</div>
+      <div class="screen" style="margin-top:12px"><img id="preview" alt="Current frame"></div>
+      <div class="status"><span class="dot" id="dot"></span><span id="conn">Connecting…</span></div>
+      <div class="small" id="connNote"></div>
+      <dl>
+        <dt>Showing</dt><dd id="panel">–</dd>
+        <dt>Last upload took</dt><dd id="took">–</dd>
+        <dt>Fastest refresh now</dt><dd id="rate">–</dd>
+        <dt>Uploads this session</dt><dd id="session">0</dd>
+        <dt>Uploads ever</dt><dd id="life">0</dd>
+      </dl>
+      <div id="msg"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>What to show</h2>
+      <div class="modes" id="modes"></div>
+      <div class="row" id="rotRow">
+        <span class="small">Rotate through:</span>
+        <span id="rotation"></span>
+        <label>every <input type="number" id="dwell" min="3" max="3600"> s</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Refresh speed</h2>
+      <div class="row" style="margin-top:0">
+        <input type="range" id="interval" min="0" max="60" step="0.5">
+        <span id="intervalText" style="min-width:150px"></span>
+      </div>
+      <p class="small">A frame is only uploaded when its pixels change. A full frame takes about a second
+        to send, so that is the ceiling. Each upload is probably saved to the screen's own storage, and
+        nobody knows how many saves it survives, so faster is a risk you are choosing. The counter on the
+        left keeps score.</p>
+      <div class="row">
+        <label>Home-page gauge follows
+          <select id="gauge"><option value="off">nothing</option><option value="cpu">CPU load</option>
+          <option value="gpu">GPU load</option><option value="ram">RAM use</option></select></label>
+        <span class="small">Experimental. Moves the battery gauge on the home page several times a second, with no picture upload. Pick “Leave screen alone” and “Show home page” to see it.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Your own picture or GIF</h2>
+      <div class="row" style="margin-top:0">
+        <label>Send to <select id="target">
+          <option value="picture">Picture page (still)</option>
+          <option value="page">GIF page (up to 160 frames)</option>
+          <option value="home">Home-page strip (96×64, up to 42 frames)</option>
+          <option value="boot">Startup animation (up to 64 frames)</option></select></label>
+        <label>Fit <select id="fit"><option value="cover">fill</option><option value="contain">letterbox</option></select></label>
+        <label class="file">Choose file…<input type="file" id="file" accept="image/*"></label>
+      </div>
+      <div class="row">
+        <button data-action="view_home">Show home page</button>
+        <button data-action="view_gif">Show GIF page</button>
+        <button data-action="next_picture">Next stored picture</button>
+        <button data-action="clock">Sync clock</button>
+      </div>
+      <div class="row">
+        <button class="danger" data-action="clear_pictures" data-confirm="Delete every stored picture from the screen?">Clear stored pictures</button>
+        <button class="danger" data-action="clear_gif" data-confirm="Delete the stored GIF from the screen?">Clear GIF</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Details</h2>
+      <div class="row" style="margin-top:0">
+        <label><input type="checkbox" id="twelve_hour"> 12-hour clock</label>
+        <label><input type="checkbox" id="clock_sync"> Keep the keyboard's clock in sync</label>
+      </div>
+      <div class="row">
+        <label>Badge <input type="text" id="badge_big" maxlength="4" style="width:60px"></label>
+        <input type="text" id="badge_line1" maxlength="14" aria-label="Badge line 1">
+        <input type="text" id="badge_line2" maxlength="18" aria-label="Badge line 2">
+      </div>
+      <div class="row">
+        <label>Clock footer <input type="text" id="footer" maxlength="18"></label>
+      </div>
+      <div class="row">
+        <label>Weather at latitude <input type="number" id="weather_lat" step="0.01"></label>
+        <label>longitude <input type="number" id="weather_lon" step="0.01"></label>
+        <label><select id="weather_unit"><option>F</option><option>C</option></select></label>
+      </div>
+      <p class="small">Weather is off until both are set. It then sends those coordinates to open-meteo.com every 15 minutes.</p>
+      <div class="row">
+        <button id="testAlert">Send a test alert</button>
+        <button id="clearAlert">Dismiss alert</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const MODES = [["rotate", "Rotate"], ["system", "System monitor"], ["clock", "Clock"], ["badge", "Name badge"],
+               ["image", "Your picture"], ["external", "Pushed frame"], ["off", "Leave screen alone"]];
+const ROTATABLE = ["system", "clock", "badge", "image", "external"];
+const FIELDS = ["dwell", "twelve_hour", "clock_sync", "gauge", "badge_big", "badge_line1", "badge_line2",
+                "footer", "weather_lat", "weather_lon", "weather_unit"];
+let state = null, editing = false;
+
+async function post(path, body, raw) {
+  try {
+    const r = await fetch(path, {method: "POST", body: raw ? body : JSON.stringify(body || {}),
+                                 headers: raw ? {} : {"Content-Type": "application/json"}});
+    const data = await r.json();
+    $("msg").textContent = r.ok ? "" : (data.error || "Request failed");
+    return data;
+  } catch (e) { $("msg").textContent = "The app is not responding."; }
+  finally { refresh(); }
+}
+const setting = patch => post("/api/settings", patch);
+
+function build() {
+  for (const [id, label] of MODES) {
+    const b = document.createElement("button");
+    b.textContent = label; b.dataset.mode = id;
+    b.onclick = () => setting({mode: id});
+    $("modes").append(b);
+  }
+  for (const id of ROTATABLE) {
+    const l = document.createElement("label");
+    l.innerHTML = `<input type="checkbox" data-rot="${id}"> ${MODES.find(m => m[0] === id)[1]}`;
+    l.style.marginRight = "10px";
+    l.firstChild.onchange = () => setting({rotation: ROTATABLE.filter(r =>
+      document.querySelector(`[data-rot="${r}"]`).checked)});
+    $("rotation").append(l);
+  }
+  for (const id of FIELDS) {
+    const el = $(id);
+    el.onfocus = () => editing = true;
+    el.onblur = () => editing = false;
+    el.onchange = () => setting({[id]: el.type === "checkbox" ? el.checked : el.value});
+  }
+  $("interval").oninput = () => { editing = true; showInterval(+$("interval").value); };
+  $("interval").onchange = () => { editing = false; setting({min_interval: +$("interval").value}); };
+  document.querySelectorAll("[data-action]").forEach(b => b.onclick = () => {
+    if (b.dataset.confirm && !confirm(b.dataset.confirm)) return;
+    post("/api/action", {action: b.dataset.action});
+  });
+  $("file").onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $("msg").textContent = "Sending…";
+    await post(`/api/upload?target=${$("target").value}&fit=${$("fit").value}`, file, true);
+    e.target.value = "";
+  };
+  $("testAlert").onclick = () => post("/api/alert",
+    {title: "Build finished", lines: ["yunzii / main", "all tests passed"], level: "ok", seconds: 15});
+  $("clearAlert").onclick = () => post("/api/alert", {clear: true});
+}
+
+function showInterval(v) {
+  $("intervalText").textContent = v === 0 ? "as fast as it can" : `at most every ${v} s`;
+}
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/api/state")).json(); }
+  catch (e) { $("conn").textContent = "App stopped"; $("dot").className = "dot"; return; }
+  state = s;
+  $("preview").src = "/api/preview.png?" + Date.now();
+  $("dot").className = "dot" + (s.connected ? (s.dry_run ? " dry" : " on") : "");
+  $("conn").textContent = s.busy || (s.connected ? (s.dry_run ? "Dry run, no keyboard" : "Keyboard connected") : "Keyboard not connected");
+  $("connNote").textContent = s.connected ? "" : s.device_error;
+  $("panel").textContent = s.panel === "alert" ? "Alert" : (MODES.find(m => m[0] === s.panel) || ["", s.panel])[1];
+  $("took").textContent = s.last_upload_ms ? (s.last_upload_ms / 1000).toFixed(2) + " s" : "–";
+  $("rate").textContent = s.seconds_per_frame ? `1 frame / ${s.seconds_per_frame} s` : "–";
+  $("session").textContent = s.session_uploads.toLocaleString();
+  $("life").textContent = s.lifetime_uploads.toLocaleString();
+  const st = s.settings;
+  document.querySelectorAll("[data-mode]").forEach(b => {
+    b.classList.toggle("sel", b.dataset.mode === st.mode);
+    b.disabled = (b.dataset.mode === "image" && !s.has_image) || (b.dataset.mode === "external" && !s.has_external);
+  });
+  $("rotRow").style.display = st.mode === "rotate" ? "" : "none";
+  if (editing) return;
+  ROTATABLE.forEach(r => document.querySelector(`[data-rot="${r}"]`).checked = st.rotation.includes(r));
+  for (const id of FIELDS) {
+    const el = $(id);
+    if (el.type === "checkbox") el.checked = st[id]; else el.value = st[id] ?? "";
+  }
+  $("interval").value = st.min_interval; showInterval(st.min_interval);
+}
+
+build(); refresh(); setInterval(refresh, 1000);
+</script>
+</body>
+</html>

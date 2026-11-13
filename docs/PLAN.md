@@ -25,13 +25,12 @@ capturing anything ourselves:
 
 ### Constraints that shape what we display
 
-1. **No partial updates.** Every change means a full 96×160 frame upload, which takes a few
-   seconds and must be ACK-gated or the image bands. Plan for refreshes about once a minute,
-   not 30 fps.
+1. **No partial updates are known.** Every change is a full 96×160 frame upload, about one
+   second. See [REFRESH.md](REFRESH.md) for how fast we can go and what it costs.
 2. **The home clock is firmware-drawn.** We can set the time and date, but not its font or
    background colour. Custom layouts go on the picture page or in the 96×64 strip.
-3. **Flash wear is unknown.** Pictures are stored in a ring of slots, and nobody has confirmed
-   whether each upload writes flash. Refresh live cards sparingly until we test this.
+3. **Storage wear is likely.** Pictures are stored in a ring of 16 slots and are probably written
+   to flash on every upload. How many writes the chip survives is unknown.
 4. **Wired only** for screen uploads. On 2.4G or Bluetooth the screen can't be updated.
 5. **Small text.** At 96 px wide, about 12 characters per line at 9 px is the practical limit.
    Bold sans, high contrast, and one idea per screen.
