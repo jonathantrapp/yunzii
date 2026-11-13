@@ -198,6 +198,32 @@ def alert(info: dict, now: float) -> Image.Image:
     return img
 
 
+def test_card(number: int, total: int) -> Image.Image:
+    """A numbered card for the storage test. Each number gets its own colour."""
+    hue = [(200, 60, 70), (60, 140, 220), (70, 170, 90), (200, 150, 40), (150, 90, 210)][number % 5]
+    img, d = _new(tuple(c // 4 for c in hue))
+    d.rectangle([0, 0, WIDTH - 1, 22], fill=hue)
+    _center(d, 5, "STORAGE TEST", font(9, bold=True), (255, 255, 255))
+    _center(d, 44, str(number), font(54, bold=True), FG)
+    _center(d, 122, f"card {number} of {total}", font(9), DIM)
+    return img
+
+
+def home_card(lines: list[tuple[str, str]]) -> Image.Image:
+    """Preview shown while the keyboard draws its own home page."""
+    img, d = _new()
+    _center(d, 8, "LIVE HOME PAGE", font(9, bold=True), ACCENT)
+    _center(d, 22, "no picture uploads", font(8), DIM)
+    y = 46
+    for label, value in lines:
+        d.text((6, y), label, font=font(8, bold=True), fill=DIM)
+        d.text((6, y + 11), _fit(d, value, font(10, bold=True, mono=True), WIDTH - 12),
+               font=font(10, bold=True, mono=True), fill=FG)
+        y += 32
+    _center(d, 144, "drawn by the keyboard", font(8), DIM)
+    return img
+
+
 def from_image(source: Image.Image, fit: str = "cover", height: int = HEIGHT) -> Image.Image:
     """Any picture, scaled to the panel."""
     rgba = source.convert("RGBA")
@@ -220,5 +246,6 @@ def to_png(img: Image.Image) -> bytes:
 
 
 PANELS = {"system": system, "clock": clock, "badge": badge}
-LABELS = {"system": "System monitor", "clock": "Clock", "badge": "Name badge",
-          "image": "Your picture", "external": "Pushed by another program"}
+LABELS = {"rotate": "Rotate", "system": "System monitor", "clock": "Clock", "badge": "Name badge",
+          "image": "Your picture", "external": "Frame from another program",
+          "home": "Live home page (no uploads)", "off": "Leave the screen alone", "alert": "Alert"}

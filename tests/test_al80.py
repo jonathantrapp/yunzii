@@ -127,6 +127,8 @@ class Rendering(unittest.TestCase):
             self.assertEqual(first.tobytes(), second.tobytes(), name)   # same input, no upload
         weather = dict(self.CTX, weather={"temp": 48, "text": "Partly cloudy", "high": 52, "low": 39})
         self.assertEqual(panels.clock(weather).size, (96, 160))
+        self.assertEqual(panels.test_card(7, 20).size, (96, 160))
+        self.assertNotEqual(panels.test_card(7, 20).tobytes(), panels.test_card(8, 20).tobytes())
         for level in ("info", "ok", "warn", "error"):
             card = panels.alert({"title": "x" * 60, "lines": ["y" * 60], "level": level, "at": 0}, 600)
             self.assertEqual(card.size, (96, 160))
@@ -209,13 +211,14 @@ class EngineAndServer(unittest.TestCase):
     def test_gauge_and_pushed_sensors(self):
         self.assertEqual(self.call("/api/sensors", {"cpu": 73, "gpu_temp": 66, "junk": "x"})["taken"],
                          ["cpu", "gpu_temp"])
-        self.engine.settings["gauge"] = "cpu"
+        self.engine.update_settings({"mode": "home", "gauge": "cpu"})
         self.engine._tick()
         self.assertEqual(self.engine.device.values[p.PK_BATT_LEVEL], 73)
         self.assertEqual(self.call("/api/state")["sensors"]["gpu_temp"], 66)
 
-    def test_api_serves_page_preview_and_actions(self):
-        self.assertIn(b"AL80 Screen", self.call("/"))
+    def test_api_preview_actions_and_upload(self):
+        with self.assertRaises(urllib.error.HTTPError):
+            self.call("/")                                   # no web page any more
         self.engine._tick()
         self.assertEqual(Image.open(io.BytesIO(self.call("/api/preview.png"))).size, (96, 160))
         self.call("/api/action", {"action": "view_home"})
@@ -227,6 +230,43 @@ class EngineAndServer(unittest.TestCase):
         self.engine._tick()
         self.assertEqual(self.engine.settings["mode"], "image")
         self.assertEqual(self.engine.device.picture[:2], bytes.fromhex("0640"))
+
+    def test_live_home_page_never_uploads_a_picture(self):
+        self.engine.update_settings({"mode": "home", "gauge": "gpu", "home_readout": True})
+        self.engine.sensors.push({"cpu": 37, "gpu": 81, "gpu_temp": 62})
+        for _ in range(4):
+            self.engine._tick()
+        device = self.engine.device
+        self.assertEqual((device.view, device.picture, self.engine.session_uploads), ("home", None, 0))
+        self.assertEqual(device.values[p.PK_BATT_LEVEL], 81)
+        self.assertEqual(device.clock, (37, 81, 62))
+        self.assertFalse(any(r[7:10] == bytes.fromhex("A55A0C") for r in device.reports))
+        # Turning the readout off hands the clock back to the real time.
+        self.engine.update_settings({"home_readout": False, "clock_sync": True, "twelve_hour": False})
+        self.engine._tick()
+        self.assertEqual(device.clock[:2], (dt.datetime.now().hour, dt.datetime.now().minute))
+        # An alert is the one thing that uploads; afterwards the home page comes back.
+        self.engine.set_alert({"title": "done", "seconds": 30})
+        self.engine._tick()
+        self.assertEqual((device.view, self.engine.session_uploads), ("picture", 1))
+        self.engine.clear_alert()
+        self.engine._tick()
+        self.assertEqual(device.view, "home")
+
+    def test_storage_test_and_its_answers(self):
+        self.engine.start_storage_test(count=5)
+        self.engine._tick()
+        self.assertEqual((self.engine.storage_test, self.engine.session_uploads), ("waiting", 5))
+        self.assertEqual(self.engine.settings["mode"], "off")
+        self.engine._tick()
+        self.assertEqual(self.engine.session_uploads, 5)        # nothing more while waiting
+        self.assertEqual(Engine(dry_run=True, state_dir=Path(self.tmp.name)).storage_test, "waiting")
+        self.engine.record_storage_result("first")
+        self.assertEqual((self.engine.settings["storage"], self.engine.settings["min_interval"]), ("ram", 1.0))
+        self.engine.record_storage_result("last")
+        self.assertEqual((self.engine.settings["storage"], self.engine.settings["min_interval"]), ("flash", 30.0))
+        self.engine.record_storage_result("all")
+        self.assertEqual((self.engine.settings["storage"], self.engine.storage_test), ("untested", ""))
 
     def test_other_sites_are_refused(self):
         for kwargs in ({"headers": {"Origin": "https://evil.example"}}, {"host": "evil.example"}):

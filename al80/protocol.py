@@ -40,7 +40,7 @@ PK_TIME, PK_DATE = 0x09, 0x0A
 PK_GO_HOME, PK_ADD_PIC, PK_NEXT_PIC, PK_DEL_PIC, PK_GO_GIF = 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
 PK_EVENT, PK_FRAME_LEN, PK_GIF_NUM, PK_GIF_FRAME = 0x10, 0x11, 0x12, 0x13
 
-PICTURE_SLOTS = 16
+PICTURE_SLOTS = 16       # what the vendor app clears; the real count is unconfirmed
 
 
 class GifTarget(NamedTuple):
@@ -132,6 +132,18 @@ def clock_stream(now: _dt.datetime, twelve_hour: bool = False, repeat: int = 3) 
     return steps * repeat
 
 
+def readout_stream(a: int, b: int, c: int) -> list[Step]:
+    """Put three two-digit numbers where the home page shows hours, minutes, seconds.
+
+    Experimental: the module may refuse hours over 23 or minutes over 59. It
+    also counts the last field up once a second, so this is resent often.
+    """
+    values = [max(0, min(99, int(v))) for v in (a, b, c)]
+    return [Step(report(OP_ANNOUNCE, command(PK_TIME, declared=3)), 0.03),
+            Step(report(OP_DATA, values), 0.03),
+            Step(FINISH, 0.03)]
+
+
 def gauge_stream(percent: int) -> list[Step]:
     """Set the home page's battery gauge to a value. One tiny packet, no image.
 
@@ -179,8 +191,8 @@ def gif_stream(frames: list[bytes], target: str, fps: int) -> list[Step]:
     return steps
 
 
-def clear_pictures_stream() -> list[Step]:
-    return simple_stream(PK_DEL_PIC) * PICTURE_SLOTS
+def clear_pictures_stream(count: int = PICTURE_SLOTS) -> list[Step]:
+    return simple_stream(PK_DEL_PIC) * count
 
 
 def clear_gif_stream() -> list[Step]:
